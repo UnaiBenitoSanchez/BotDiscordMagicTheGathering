@@ -7,11 +7,21 @@ import json
 import os
 from datetime import datetime
 
+bot.run(TOKEN)
+
 # Configuración del bot
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+# --- Cargar token desde variable de entorno ---
+TOKEN = os.getenv("DISCORD_TOKEN")
+
+# --- Ejemplo de evento para probar ---
+@bot.event
+async def on_ready():
+    print(f"✅ Bot conectado como {bot.user} ({datetime.now().strftime('%H:%M:%S')})")
+    
 # URL base de la API de Scryfall
 SCRYFALL_API = "https://api.scryfall.com/cards/named"
 SCRYFALL_SEARCH = "https://api.scryfall.com/cards/search"
@@ -1480,8 +1490,8 @@ async def on_command_error(ctx, error):
 
 # Mi token de bot de Discord
 if __name__ == "__main__":
-    TOKEN = "MTQzMzA1NTkxMDI1MDY4MDQzMQ.GxbUYi.dwn5w1OSCUMuDOzriYTQcmXk2i__tqI1XjS-QE"
     if not TOKEN:
-        print("Error: TOKEN no añadida")
+        print("❌ Error: la variable de entorno DISCORD_TOKEN no está configurada.")
     else:
+        print("🚀 Iniciando el bot...")
         bot.run(TOKEN)
