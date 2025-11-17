@@ -442,7 +442,7 @@ async def on_command_error(ctx, error):
 
 # Aquí arranca todo
 if __name__ == "__main__":
-    TOKEN = "MTQzMzA1NTkxMDI1MDY4MDQzMQ.G0avMy.JMQkU9TTfgOoa3mxqowgrFuS5x2QNWGfUgnY84"
+    TOKEN = "MTQzMzA1NTkxMDI1MDY4MDQzMQ.Gz_P9p.0P1uemCt-4fDdkwKnXhezTTBXaUJ3VpqdMXvb4"
     if not TOKEN:
         print("Error: TOKEN no añadida")
     else:
