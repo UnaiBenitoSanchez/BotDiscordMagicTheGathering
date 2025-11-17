@@ -441,17 +441,14 @@ async def on_command_error(ctx, error):
 
 
 # Aquí arranca todo
-def cargar_token():
-    try:
-        with open("token.txt", "r", encoding="utf-8") as f:
-            return f.read().strip()
-    except FileNotFoundError:
-        print("❌ Error: No se encontró el archivo token.txt")
-        return None
+import os
 
 if __name__ == "__main__":
-    TOKEN = cargar_token()
+    TOKEN = os.getenv("DISCORD_TOKEN")
+
     if not TOKEN:
-        print("❌ No se pudo cargar la token. Crea el archivo token.txt con tu token dentro.")
+        print("❌ Error: No hay TOKEN en las variables de entorno")
     else:
         bot.run(TOKEN)
+
+
