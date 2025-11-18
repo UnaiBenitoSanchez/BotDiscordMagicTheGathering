@@ -13,6 +13,8 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
 
+bot_status = "starting"
+
 # URLs de Scryfall
 SCRYFALL_API = "https://api.scryfall.com/cards/named"
 SCRYFALL_RANDOM = "https://api.scryfall.com/cards/random"
@@ -32,7 +34,11 @@ def home():
 
 @app.route('/health')
 def health():
-    return {"status": "alive", "timestamp": datetime.now().isoformat()}, 200
+    return {
+        "status": bot_status,
+        "timestamp": datetime.now().isoformat()
+    }, 200
+
 
 def run_flask():
     port = int(os.environ.get("PORT", 5000))
@@ -167,14 +173,21 @@ class CardView(View):
 
 @bot.event
 async def on_ready():
+    global bot_status
+    bot_status = "online"
+    
     cargar_favoritos()
 
     if not auto_guardar.is_running():
         auto_guardar.start()
 
     print(f"{bot.user} está conectado y listo!")
-    print(f"📊 Usuarios con favoritos: {len(favoritos_usuarios)}")
-    print("------")
+
+@bot.event
+async def on_disconnect():
+    global bot_status
+    bot_status = "offline"
+    print("⚠️ El bot se desconectó")
 
 
 @tasks.loop(minutes=5)
