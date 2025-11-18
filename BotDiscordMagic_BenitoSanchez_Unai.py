@@ -7,6 +7,7 @@ import os
 from datetime import datetime
 from threading import Thread
 from flask import Flask
+from pymongo import MongoClient
 
 # Config básica
 intents = discord.Intents.default()
@@ -17,13 +18,92 @@ bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
 SCRYFALL_API = "https://api.scryfall.com/cards/named"
 SCRYFALL_RANDOM = "https://api.scryfall.com/cards/random"
 
-# Donde guardamos los favoritos
-FAVORITOS_FILE = "./favoritos.json"
+# MongoDB Connection
+MONGODB_URI = os.environ.get("MONGODB_URI")
+db_client = None
+db = None
 
-# Aquí van los favoritos de cada persona
+# Cache en memoria de favoritos
 favoritos_usuarios = {}
 
-#KeepAlive con Flask
+# ============================================
+# MONGODB FUNCTIONS
+# ============================================
+
+def conectar_mongodb():
+    """Conecta a MongoDB Atlas"""
+    global db_client, db
+    try:
+        if MONGODB_URI:
+            db_client = MongoClient(MONGODB_URI)
+            db = db_client['mtg_bot']
+            # Test de conexión
+            db_client.admin.command('ping')
+            print("✅ Conectado a MongoDB Atlas")
+            return True
+        else:
+            print("⚠️ No hay MONGODB_URI configurada, usando archivo local")
+            return False
+    except Exception as e:
+        print(f"❌ Error conectando a MongoDB: {e}")
+        return False
+
+def cargar_favoritos():
+    """Carga favoritos desde MongoDB o archivo local"""
+    global favoritos_usuarios
+    
+    # Intentar cargar desde MongoDB primero
+    if db is not None:
+        try:
+            usuarios = db.favoritos.find()
+            favoritos_usuarios = {}
+            for usuario in usuarios:
+                favoritos_usuarios[usuario['user_id']] = usuario['cartas']
+            print(f"✅ Favoritos cargados desde MongoDB: {len(favoritos_usuarios)} usuarios")
+            return
+        except Exception as e:
+            print(f"❌ Error cargando desde MongoDB: {e}")
+    
+    # Fallback: cargar desde archivo local (temporal)
+    try:
+        if os.path.exists("./favoritos.json"):
+            with open("./favoritos.json", "r", encoding="utf-8") as f:
+                favoritos_usuarios = json.load(f)
+            print(f"✅ Favoritos cargados desde archivo local: {len(favoritos_usuarios)} usuarios")
+        else:
+            favoritos_usuarios = {}
+            print("📝 Iniciando con lista de favoritos vacía")
+    except Exception as e:
+        print(f"❌ Error cargando favoritos: {e}")
+        favoritos_usuarios = {}
+
+def guardar_favoritos():
+    """Guarda favoritos en MongoDB y archivo local (backup)"""
+    
+    # Guardar en MongoDB primero
+    if db is not None:
+        try:
+            for user_id, cartas in favoritos_usuarios.items():
+                db.favoritos.update_one(
+                    {'user_id': user_id},
+                    {'$set': {'cartas': cartas, 'updated_at': datetime.now()}},
+                    upsert=True
+                )
+            print("💾 Favoritos guardados en MongoDB")
+        except Exception as e:
+            print(f"❌ Error guardando en MongoDB: {e}")
+    
+    # Backup en archivo local
+    try:
+        with open("./favoritos.json", "w", encoding="utf-8") as f:
+            json.dump(favoritos_usuarios, f, ensure_ascii=False, indent=2)
+        print("💾 Backup local guardado")
+    except Exception as e:
+        print(f"⚠️ Error guardando backup local: {e}")
+
+# ============================================
+# KEEPALIVE CON FLASK
+# ============================================
 app = Flask(__name__)
 
 @app.route('/')
@@ -32,7 +112,13 @@ def home():
 
 @app.route('/health')
 def health():
-    return {"status": "alive", "timestamp": datetime.now().isoformat()}, 200
+    db_status = "connected" if db is not None else "disconnected"
+    return {
+        "status": "alive",
+        "timestamp": datetime.now().isoformat(),
+        "database": db_status,
+        "usuarios": len(favoritos_usuarios)
+    }, 200
 
 def run_flask():
     port = int(os.environ.get("PORT", 5000))
@@ -44,28 +130,9 @@ def keep_alive():
     server.start()
     print(f"✅ Servidor HTTP iniciado en puerto {os.environ.get('PORT', 5000)}")
 
-# Funciones
-def cargar_favoritos():
-    global favoritos_usuarios
-    try:
-        if os.path.exists(FAVORITOS_FILE):
-            with open(FAVORITOS_FILE, "r", encoding="utf-8") as f:
-                favoritos_usuarios = json.load(f)
-            print(f"✅ Favoritos cargados: {len(favoritos_usuarios)} usuarios")
-        else:
-            favoritos_usuarios = {}
-    except Exception as e:
-        print(f"❌ Error al cargar favoritos: {e}")
-        favoritos_usuarios = {}
-
-
-def guardar_favoritos():
-    try:
-        with open(FAVORITOS_FILE, "w", encoding="utf-8") as f:
-            json.dump(favoritos_usuarios, f, ensure_ascii=False, indent=2)
-        print("💾 Favoritos guardados correctamente")
-    except Exception as e:
-        print(f"❌ Error al guardar favoritos: {e}")
+# ============================================
+# FUNCIONES ORIGINALES
+# ============================================
 
 def crear_embed_carta(data):
     nombre = data.get("name", "Sin nombre")
@@ -167,8 +234,13 @@ class CardView(View):
 
 @bot.event
 async def on_ready():
+    # Conectar a MongoDB
+    conectar_mongodb()
+    
+    # Cargar favoritos
     cargar_favoritos()
 
+    # Iniciar auto-guardado
     if not auto_guardar.is_running():
         auto_guardar.start()
 
